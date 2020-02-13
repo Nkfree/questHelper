@@ -22,6 +22,15 @@ I'm aware that there is ```config.disallowedDeleteRefIds``` that perfectly does 
 1. ```/qhhelp``` -- brings up list of all available commands
 2. ```/qhlist``` -- *command to re-enable specific item for specific player*; brings up list of all registered quest items (those in ```questItems.lua```), after clicking an item and pressing 'OK', you'll be redirected to another list where you can choose which player will be affected (if he had already picked the item up)
 
+## Brief showcase of the item protection:
+
+1. Protection from placing it in world
+2. Protection from placing item in container
+3. Protection from selling item to merchant (only those listed in ```merchants.json```)
+(Player doesn't lose his item, nor gold nor does merchant's inventory contain that item preventing item duplication, hopefully)
+
+https://www.youtube.com/watch?v=UKt4LvBBh1g
+
 ## Credits:
 - urm - I copied and modified some functions from his VisualHarvesting script; advices on preventing item from being placed
 - Rickoff - sale protection advices
