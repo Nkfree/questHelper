@@ -23,6 +23,6 @@ I'm aware that there is ```config.disallowedDeleteRefIds``` that perfectly does 
 2. ```/qhlist``` -- *command to re-enable specific item for specific player*; brings up list of all registered quest items (those in ```questItems.lua```), after clicking an item and pressing 'OK', you'll be redirected to another list where you can choose which player will be affected (if he had already picked the item up)
 
 ## Credits:
-- urm - I copied and modified some functions from his VisualHarvesting script; advices on preventing item on being placed
+- urm - I copied and modified some functions from his VisualHarvesting script; advices on preventing item from being placed
 - Rickoff - sale protection advices
 - Wujek - testing
