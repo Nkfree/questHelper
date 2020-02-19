@@ -1,6 +1,8 @@
 # questHelper
 [TES3MP] Script that protects quest items from being sold or dropped and allows each player to pick up one instance of that item regardless of whether another player picked it up before
 
+**UPDATE 19.2.2020 - Redownload questHelper.lua and questItems.lua (optimizations and fixes), delete questHelper.json (optimization)**
+
 ## Disclaimer
 
 I'm aware that there is ```config.disallowedDeleteRefIds``` that perfectly does the part where one object is available to multiple players and when Player1 picks it up it becomes invisible for him not affecting visibility for another Player that didn't interact with the object before but I wanted to have an emergency command (admin/moderator/owner rank required) that could re-enable certain item for specific player if needed (server crashes, inventory is not properly saved or any other reason) 
