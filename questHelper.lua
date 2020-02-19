@@ -1,11 +1,11 @@
 questItems = require("questItems")
 
-
 local lang = {}
 
 lang["pickupSuccess"] = "You have picked up %s."
 lang["unableDrop"] = "You can't drop the %s!"
 lang["unableSell"] = "I don't buy quest items!"
+lang["reenableSuccess"] = "You have succcessfully re-enabled %s " .. color.Default .. "(%s" .. color.Default .. ") for player %s" .. color.Default .. "!\n"
 
 local cmds = {}
 cmds[1] = "qhlist"
@@ -19,6 +19,7 @@ local menuCmd = {}
 menuCmd[1] = color.SkyBlue .. "/" .. cmds[1]
 menuCmd[2] = color.SkyBlue .. "/" .. cmds[2]
 
+local merchants = jsonInterface.load("custom/merchants.json")
 
 local Methods = {}
 
@@ -28,9 +29,10 @@ Methods.blockSellMerchant = {}
 Methods.lastActivatedMerchant = {}
 Methods.forceEnableItemIndex = {}
 
-local merchants = jsonInterface.load("custom/merchants.json")
+Methods.itemNameRefIdPairs = {}
+Methods.itemNamesByIndex = {}
 
-local function doMessage(pid, message, ...)
+local function doMessage(pid, message, chat, ...)
 
 	local args = {...}
 	local newMessage = lang[message]
@@ -38,9 +40,12 @@ local function doMessage(pid, message, ...)
 	if #args > 0 then
 		newMessage = string.format(newMessage, unpack(args))
 	end
-
-	tes3mp.MessageBox(pid, Methods.guiId.msg, newMessage)
-
+	
+	if chat == true then
+		tes3mp.SendMessage(pid, color.Warning .. "[questHelper] " .. color.Default .. newMessage, false)
+	else
+		tes3mp.MessageBox(pid, Methods.guiId.msg, newMessage)
+	end
 end
 
 function Methods.LoadData()
@@ -92,7 +97,8 @@ function Methods.createJsonEntry(refId)
 	local data = Methods.data
 		
 	if data[refId] == nil then
-		data[refId] = {disabledFor = {}}
+		data[refId] = {}
+		Methods.SaveData()
 	end
 end
 
@@ -110,77 +116,49 @@ function Methods.isQuestItem(refId)
 	return questItems[refId] ~= nil
 end
 
-function Methods.createItemListFromData()
-	
-	local itemList = {}
-	local itemNamesList = {}
+function Methods.fillItemListDependencies()
 		
-	for item, _ in pairs(questItems) do
-		table.insert(itemList, item)
-		table.insert(itemNamesList, questItems[item].name)
+	for item, name in pairs(questItems) do
+		Methods.itemNameRefIdPairs[name] = item
+		table.insert(Methods.itemNamesByIndex, name)
 	end
 	
 	
-	table.sort(itemList)
-	table.sort(itemNamesList)
-	
-	if Methods.itemList == nil then Methods.itemList = {} end
-	if Methods.itemNamesList == nil then Methods.itemNamesList = {} end
-	
-	if tableHelper.isEqualTo(itemList, Methods.itemList) then
-		return
-	else
-		Methods.itemList = itemList
-	end
-	
-	if tableHelper.isEqualTo(itemNamesList, Methods.itemNamesList) then
-		return
-	else
-		Methods.itemNamesList = itemNamesList
-	end
+	table.sort(Methods.itemNamesByIndex)
 end
 
-function Methods.enableItemForPlayer(targetPid, data)
+function Methods.enableItemForPlayer(pid, targetPid, tName, itemIndex)
 	
-	local name = Methods.itemNamesList[data]
-	local item
+	local name = Methods.itemNamesByIndex[itemIndex]
+	local item = Methods.itemNameRefIdPairs[name]
+	local doUpdate = false
 	
-	for refId, _ in pairs(questItems) do
-		if name == questItems[refId].name then
-			item = refId
-		end
-	end
-			
-	local cellDescription = tes3mp.GetCell(targetPid)
-	
-	if Methods.data[item] ~= nil then
-		local pName = tes3mp.GetName(targetPid)
-		
-		if tableHelper.containsValue(Methods.data[item].disabledFor, pName) then
-			tableHelper.removeValue(Methods.data[item].disabledFor, pName)
+	if Methods.data[item] ~= nil and Methods.data[item][tName] then
+			Methods.data[item][tName] = nil
 			Methods.SaveData()
+			doUpdate = true
+	end
+	
+	if doUpdate then
+		if Players[targetPid] ~= nil and Players[targetPid]:IsLoggedIn() then
+				
+			local cellDescription = tes3mp.GetCell(targetPid)
+			
+			Methods.updateCell(targetPid, cellDescription)	
 		end
-		
-		if cellDescription == nil then
-			return
-		else
-			Methods.updateCell(targetPid, cellDescription)
-		end
-		
+		doMessage(pid, "reenableSuccess", true, color.DodgerBlue .. name, color.GoldenRod .. item, color.Yellow .. tName)
 	end
 end
 
-function Methods.guiItemList(pid, cmd)
+function Methods.guiQuestItemList(pid, cmd)
 	
-	Methods.createItemListFromData()
-
 	local lbTitle = color.DodgerBlue .. "\n- Quest items list -" 
-	local list = ""
+	local list = " - CANCEL -\n"
 	local delimeter = "\n"
 	
-	for index, name in pairs(Methods.itemNamesList) do
+	for index, name in ipairs(Methods.itemNamesByIndex) do
 		
-		if index == #Methods.itemNamesList then
+		if index == #Methods.itemNamesByIndex then
 			delimeter = ""
 		end
 
@@ -188,46 +166,60 @@ function Methods.guiItemList(pid, cmd)
 	end
 	
 	tes3mp.ListBox(pid, Methods.guiId.itemList, lbTitle, list)
-	
 end
 
 function Methods.choosePlayerList(pid)
-
-	local lbTitle = color.DodgerBlue .. "\n- Choose player to activate the item for -"
-	local list = ""
-	local delimeter = "\n"
+	
+	Methods.playerNamesByIndex = {}
+	Methods.playerNamePidPairs = {}
+	Methods.playerNamesByIndex[pid] = {}
+	Methods.playerNamePidPairs[pid] = {}
 	
 	for id, player in pairs(Players) do
+		Methods.playerNamePidPairs[pid][player.name] = id
+		table.insert(Methods.playerNamesByIndex[pid], player.name)
+	end
+	
+	table.sort(Methods.playerNamesByIndex[pid])
+	
+	local lbTitle = color.DodgerBlue .. "\n- Choose player to activate the item for -"
+	local list = " - CANCEL -\n"
+	local delimeter = "\n"
+	
+	for index = 1, #Methods.playerNamesByIndex[pid] do
 		
-		if index == #Players then
+		if index == #Methods.playerNamesByIndex[pid] then
 			delimeter = ""
 		end
 		
-		list = list .. Players[id].name .. delimeter
+		list = list .. Methods.playerNamesByIndex[pid][index] .. delimeter
 	end
 	
-	tes3mp.ListBox(pid, Methods.guiId.choosePlList, lbTitle, list)	
+	tes3mp.ListBox(pid, Methods.guiId.choosePlList, lbTitle, list)
 end
 
 function Methods.OnGUIAction(EventStatus, pid, idGui, data)
 	
 	if idGui == Methods.guiId.itemList then
-		if tonumber(data) == 18446744073709551615 then
+		if tonumber(data) == 0 or tonumber(data) == 18446744073709551615 then
 			return
 		else
-			Methods.forceEnableItemIndex[pid] = tonumber(data) + 1
+			Methods.forceEnableItemIndex[pid] = tonumber(data)
 			Methods.choosePlayerList(pid)
-			return
 		end
 	elseif idGui == Methods.guiId.choosePlList then
-		if tonumber(data) == 18446744073709551615 then
-			Methods.enableItemForPlayer(pid, Methods.forceEnableItemIndex[pid])
+		
+		if tonumber(data) == 0 or tonumber(data) == 18446744073709551615 then
 			Methods.forceEnableItemIndex[pid] = nil
+			Methods.playerNamesByIndex[pid] = nil
+			Methods.playerNamePidPairs[pid] = nil
 			return
 		else
-			local target = tonumber(data)
-			Methods.enableItemForPlayer(target, Methods.forceEnableItemIndex[pid])
+			local target = Methods.playerNamesByIndex[pid][tonumber(data)]
+			Methods.enableItemForPlayer(pid, Methods.playerNamePidPairs[pid][target], target, Methods.forceEnableItemIndex[pid])
 			Methods.forceEnableItemIndex[pid] = nil
+			Methods.playerNamesByIndex[pid] = nil
+			Methods.playerNamePidPairs[pid] = nil
 			return
 		end		
 	end
@@ -254,7 +246,11 @@ end
 
 function Methods.disableObject(pid, cellDescription, uniqueIndex, itemId)
 	
-	if LoadedCells[cellDescription].data.objectData[uniqueIndex] and LoadedCells[cellDescription].data.objectData[uniqueIndex].refId == nil then 
+	if LoadedCells[cellDescription].data.objectData[uniqueIndex] == nil then
+		LoadedCells[cellDescription].data.objectData[uniqueIndex] = {}
+	end
+	
+	if LoadedCells[cellDescription].data.objectData[uniqueIndex].refId == nil then 
 		LoadedCells[cellDescription].data.objectData[uniqueIndex].refId = itemId
 	end
 
@@ -276,7 +272,8 @@ function Methods.updateCell(pid, cellDescription)
     for uniqueIndex, object in pairs(cell.data.objectData) do
 		
 		if Methods.isQuestItem(object.refId) then
-			if not tableHelper.containsValue(data[object.refId].disabledFor, pName) then
+			Methods.createJsonEntry(object.refId)
+			if not data[object.refId][pName] then
 				Methods.enableObject(pid, cellDescription, uniqueIndex)
 			else
 				Methods.disableObject(pid, cellDescription, uniqueIndex, object.refId)
@@ -299,6 +296,8 @@ end
 
 function Methods.OnServerPostInit(eventStatus)
 	Methods.LoadData()
+	tableHelper.cleanNils(Methods.data)
+	Methods.fillItemListDependencies()
 end
 
 function Methods.OnObjectActivateValidator(eventStatus, pid, cellDescription, objects, players)
@@ -307,20 +306,20 @@ function Methods.OnObjectActivateValidator(eventStatus, pid, cellDescription, ob
 			local uniqueIndex = object.uniqueIndex
 			local pName = tes3mp.GetName(pid)
 			local data = Methods.data
-			local itemName = questItems[object.refId].name
+			local itemName = questItems[object.refId]
 			
 			LoadedCells[cellDescription]:SaveObjectStates(pid)
 			
 			Methods.createJsonEntry(object.refId)
 			
-			if not tableHelper.containsValue(data[object.refId].disabledFor, pName) then
-				table.insert(data[object.refId].disabledFor, pName)
+			if not data[object.refId][pName] then
+				data[object.refId][pName] = true
 				Methods.SaveData()
 			else
 				return customEventHooks.makeEventStatus(false, false)
 			end
 			
-			doMessage(pid, "pickupSuccess", color.DodgerBlue .. itemName .. color.GoldenRod)
+			doMessage(pid, "pickupSuccess", false, color.DodgerBlue .. itemName .. color.GoldenRod)
 			tes3mp.PlaySpeech(pid, "fx/item/item.wav")
 			Methods.addItemToPlayer(pid, object.refId)
 			
@@ -363,14 +362,14 @@ function Methods.OnContainerValidator(eventStatus, pid, cellDescription, objects
 
             for itemIndex = 0, tes3mp.GetContainerChangesSize(containerIndex) - 1 do
                 local itemRefId = tes3mp.GetContainerItemRefId(containerIndex, itemIndex)
-				local itemName = questItems[itemRefId].name
 
                 if Methods.isQuestItem(itemRefId) and cell.data.objectData[uniqueIndex].refId ~= "kanabankcontainer" then
+					local itemName = questItems[itemRefId]
 					Methods.clearMerchantBlockVars(pid)
 					
 					Methods.addItemToPlayer(pid, itemRefId)
 					-- Players[pid]:SaveInventory()
-					doMessage(pid, "unableDrop", color.DodgerBlue .. itemName .. color.GoldenRod)
+					doMessage(pid, "unableDrop", false, color.DodgerBlue .. itemName .. color.GoldenRod)
                     cell:LoadContainers(pid, cell.data.objectData, {uniqueIndex})
                     return customEventHooks.makeEventStatus(false, false)
                 end
@@ -387,12 +386,12 @@ function Methods.OnObjectPlaceValidator(eventStatus, pid, cellDescription, objec
 			
 			Methods.clearMerchantBlockVars(pid)
 			
-			local itemName = questItems[object.refId].name
+			local itemName = questItems[object.refId]
 		
 			Methods.addItemToPlayer(pid, object.refId)
 			-- Players[pid]:SaveInventory()
 			
-			doMessage(pid, "unableDrop", color.DodgerBlue .. itemName .. color.GoldenRod)
+			doMessage(pid, "unableDrop", false, color.DodgerBlue .. itemName .. color.GoldenRod)
 			
 			return customEventHooks.makeEventStatus(false,false)
 		end
@@ -422,7 +421,7 @@ function Methods.OnPlayerInventoryHandler(eventStatus, pid) -- prevents player f
 					tes3mp.SendInventoryChanges(pid)
 					Players[pid]:SaveInventory()
 					cell:LoadContainers(pid, oData, {Methods.lastActivatedMerchant[pid]})
-					doMessage(pid, "unableSell")
+					doMessage(pid, false, "unableSell")
 					Methods.blockSellMerchant[pid] = nil
 				end
 			else
@@ -455,7 +454,7 @@ function Methods.OnCellLoadHandler(eventStatus, pid, cellDescription)
     end
 end
 
-customCommandHooks.registerCommand(cmds[1], Methods.guiItemList)
+customCommandHooks.registerCommand(cmds[1], Methods.guiQuestItemList)
 customCommandHooks.setRankRequirment(cmds[1], 1)
 customCommandHooks.registerCommand(cmds[2], Methods.help)
 
@@ -469,4 +468,3 @@ customEventHooks.registerValidator("OnObjectPlace", Methods.OnObjectPlaceValidat
 customEventHooks.registerHandler("OnPlayerInventory", Methods.OnPlayerInventoryHandler)
 customEventHooks.registerHandler("OnPlayerDisconnect", Methods.OnPlayerDisconnectHandler)
 customEventHooks.registerHandler("OnServerExit", Methods.OnServerExit)
-
