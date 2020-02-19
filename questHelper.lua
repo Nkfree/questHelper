@@ -1,5 +1,6 @@
 questItems = require("questItems")
 
+
 local lang = {}
 
 lang["pickupSuccess"] = "You have picked up %s."
@@ -284,13 +285,19 @@ function Methods.updateCell(pid, cellDescription)
     tes3mp.SendObjectState(false, false)
 end
 
-function Methods.addItemToPlayer(pid, refId)
+function Methods.addItemToPlayer(pid, refId, count)
 
-	inventoryHelper.addItem(Players[pid].data.inventory, refId, 1, -1, -1, "")
+	local count = count
+	
+	if not count then
+		count = 1
+	end
+
+	inventoryHelper.addItem(Players[pid].data.inventory, refId, count, -1, -1, "")
 	
 	tes3mp.ClearInventoryChanges(pid)
 	tes3mp.SetInventoryChangesAction(pid, enumerations.inventory.ADD)
-	tes3mp.AddItemChange(pid, refId, 1, -1, -1, "")
+	tes3mp.AddItemChange(pid, refId, count, -1, -1, "")
 	tes3mp.SendInventoryChanges(pid)
 end
 
@@ -362,13 +369,12 @@ function Methods.OnContainerValidator(eventStatus, pid, cellDescription, objects
 
             for itemIndex = 0, tes3mp.GetContainerChangesSize(containerIndex) - 1 do
                 local itemRefId = tes3mp.GetContainerItemRefId(containerIndex, itemIndex)
+				local itemCount = tes3mp.GetContainerItemCount(containerIndex, itemIndex)
 
                 if Methods.isQuestItem(itemRefId) and cell.data.objectData[uniqueIndex].refId ~= "kanabankcontainer" then
 					local itemName = questItems[itemRefId]
 					Methods.clearMerchantBlockVars(pid)
 					
-					Methods.addItemToPlayer(pid, itemRefId)
-					-- Players[pid]:SaveInventory()
 					doMessage(pid, "unableDrop", false, color.DodgerBlue .. itemName .. color.GoldenRod)
                     cell:LoadContainers(pid, cell.data.objectData, {uniqueIndex})
                     return customEventHooks.makeEventStatus(false, false)
@@ -387,9 +393,6 @@ function Methods.OnObjectPlaceValidator(eventStatus, pid, cellDescription, objec
 			Methods.clearMerchantBlockVars(pid)
 			
 			local itemName = questItems[object.refId]
-		
-			Methods.addItemToPlayer(pid, object.refId)
-			-- Players[pid]:SaveInventory()
 			
 			doMessage(pid, "unableDrop", false, color.DodgerBlue .. itemName .. color.GoldenRod)
 			
@@ -430,10 +433,11 @@ function Methods.OnPlayerInventoryHandler(eventStatus, pid) -- prevents player f
 		end
 			
 		
-		if Methods.isQuestItem(itemRefId) and action == enumerations.inventory.REMOVE and Methods.lastActivatedMerchant[pid] ~= nil then
-			Methods.blockSellMerchant[pid] = os.time()
-			Methods.addItemToPlayer(pid, itemRefId)
-			-- Players[pid]:SaveInventory()
+		if Methods.isQuestItem(itemRefId) and action == enumerations.inventory.REMOVE then 
+			if Methods.lastActivatedMerchant[pid] ~= nil then
+				Methods.blockSellMerchant[pid] = os.time()
+			end
+			Methods.addItemToPlayer(pid, itemRefId, itemCount)
 		end
 	end
 end
