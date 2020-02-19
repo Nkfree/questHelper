@@ -1,6 +1,5 @@
 questItems = require("questItems")
 
-
 local lang = {}
 
 lang["pickupSuccess"] = "You have picked up %s."
@@ -375,6 +374,8 @@ function Methods.OnContainerValidator(eventStatus, pid, cellDescription, objects
 					local itemName = questItems[itemRefId]
 					Methods.clearMerchantBlockVars(pid)
 					
+					Methods.addItemToPlayer(pid, itemRefId, itemCount)
+					-- Players[pid]:SaveInventory()
 					doMessage(pid, "unableDrop", false, color.DodgerBlue .. itemName .. color.GoldenRod)
                     cell:LoadContainers(pid, cell.data.objectData, {uniqueIndex})
                     return customEventHooks.makeEventStatus(false, false)
@@ -386,13 +387,21 @@ end
 
 function Methods.OnObjectPlaceValidator(eventStatus, pid, cellDescription, objects) -- prevents player from placing quest item in the world
 
-	for index, object in pairs(objects) do
+	tes3mp.ReadReceivedObjectList()
+
+    for objectIndex = 0, tes3mp.GetObjectListSize() - 1 do
+
+		local itemRefId = tes3mp.GetObjectRefId(objectIndex)
+		local itemCount = tes3mp.GetObjectCount(objectIndex)
 		
-		if Methods.isQuestItem(object.refId) then
+		if Methods.isQuestItem(itemRefId) then
 			
 			Methods.clearMerchantBlockVars(pid)
 			
-			local itemName = questItems[object.refId]
+			local itemName = questItems[itemRefId]
+		
+			Methods.addItemToPlayer(pid, itemRefId, itemCount)
+			-- Players[pid]:SaveInventory()
 			
 			doMessage(pid, "unableDrop", false, color.DodgerBlue .. itemName .. color.GoldenRod)
 			
@@ -424,7 +433,7 @@ function Methods.OnPlayerInventoryHandler(eventStatus, pid) -- prevents player f
 					tes3mp.SendInventoryChanges(pid)
 					Players[pid]:SaveInventory()
 					cell:LoadContainers(pid, oData, {Methods.lastActivatedMerchant[pid]})
-					doMessage(pid, false, "unableSell")
+					doMessage(pid, "unableSell", false)
 					Methods.blockSellMerchant[pid] = nil
 				end
 			else
@@ -433,11 +442,10 @@ function Methods.OnPlayerInventoryHandler(eventStatus, pid) -- prevents player f
 		end
 			
 		
-		if Methods.isQuestItem(itemRefId) and action == enumerations.inventory.REMOVE then 
-			if Methods.lastActivatedMerchant[pid] ~= nil then
-				Methods.blockSellMerchant[pid] = os.time()
-			end
+		if Methods.isQuestItem(itemRefId) and action == enumerations.inventory.REMOVE and Methods.lastActivatedMerchant[pid] ~= nil then
+			Methods.blockSellMerchant[pid] = os.time()
 			Methods.addItemToPlayer(pid, itemRefId, itemCount)
+			-- Players[pid]:SaveInventory()
 		end
 	end
 end
