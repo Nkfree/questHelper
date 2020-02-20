@@ -12,6 +12,10 @@ I'm aware that there is ```config.disallowedDeleteRefIds``` that perfectly does 
 - merchants.json -- list of Morrowind merchants (source: https://en.uesp.net/wiki/Morrowind:Merchants)
 - questItems.lua -- INCOMPLETE list of quest items, for now it only has ```Dwemer puzzle box``` as an example and for testing
 
+## What does not work:
+- if you try to sell quest item along with non quest item, you will lose your non quest items and receive no gold for them but you will get your quest items back
+- quest items in containers don't work (ToDo)
+
 ## Installation:
 
 1. Download ```questHelper.lua``` and place it in ```server/scripts/custom```
